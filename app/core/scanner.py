@@ -9,7 +9,7 @@ from models.common.scan import FileIndex, HashStore, ScanResult, hash_file
 logger = logging.getLogger("searchem.core.scanner")
 
 LOCK_FILENAME = "index.lock"
-LOCK_TIMEOUT = 0  # non-blocking — fail immediately if already locked
+LOCK_TIMEOUT = 0  # fail immediately. Needed to avoid both CLI and REST making change at the same time. Even with this, issues could arise if used on same directory. TODO
 
 
 def _gather(directory: Path, extensions: list[str]) -> FileIndex:
@@ -93,7 +93,7 @@ class Scanner:
         hash_store = HashStore.load(self.database)
 
         if force_reprocess:
-            logger.info("Force reprocess enabled — all files will be re-embedded.")
+            logger.info("Force reprocess enabled. All files will be re-embedded.")
             return ScanResult(to_process=index, unchanged={}, hash_store=hash_store)
 
         to_process, unchanged = _filter_unchanged(index, self.directory, hash_store)
