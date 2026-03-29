@@ -1,0 +1,11 @@
+services:
+  searchem:
+    build: .
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./data:/data
+      - ${HF_CACHE_DIR:-~/.cache/huggingface}:/home/appuser/.cache/huggingface
+      - ./searchem_db:/db
+    environment:
+      - HF_HOME=/home/appuser/.cache/huggingface
