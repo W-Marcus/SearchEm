@@ -38,14 +38,15 @@ python searchem_rest.py [options]
 | `--host` | `0.0.0.0` | Host to bind to |
 | `--port` | `8000` | Port to listen on |
 | `--reload` | `False` | Enable uvicorn auto-reload |
-# SearchEm Docker Commands
 
-## Build
+## Docker Commands Examples
+
+### Build
 ```bash
 docker compose build
 ```
 
-## CLI
+### CLI
 ```bash
 # Interactive session (index + search)
 docker compose run --rm searchem-cli
@@ -56,7 +57,7 @@ docker compose run --rm searchem-cli --update
 docker compose run --rm searchem-cli --top-k 10
 ```
 
-## REST API
+### REST API
 ```bash
 # Start in foreground
 docker compose up searchem-rest
@@ -68,7 +69,7 @@ docker compose up -d searchem-rest
 docker compose up --build searchem-rest
 ```
 
-## Typical workflow
+### Typical workflow
 ```bash
 # 1. Build the index
 docker compose run --rm searchem-cli --refresh
@@ -77,7 +78,7 @@ docker compose run --rm searchem-cli --refresh
 docker compose up -d searchem-rest
 ```
 
-## Switching models
+### Switching models
 
 Re-embed everything with a different model using `--update` (required when changing models).
 
@@ -89,7 +90,7 @@ docker compose run --rm searchem-cli --update --model nomic-ai/nomic-embed-text-
 # REST (pass model at server start)
 docker compose up searchem-rest --model nomic-ai/nomic-embed-text-v2-moe
 ```
-## Concurrent indexing
+### Concurrent indexing
 
 The index is protected by a file lock. Only one process may index at a time.
 Running CLI `--refresh` and `POST /index` simultaneously is safe, however the second will fail.
