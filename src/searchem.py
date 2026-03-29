@@ -1,5 +1,4 @@
 # Author: Marcus Wallin
-import logging
 
 from args import parse_args
 from embedder import Embedder

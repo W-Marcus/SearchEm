@@ -7,7 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-logger = logging.getLogger("msearch.scanner")
+logger = logging.getLogger("searchem.scanner")
 
 HASHES_FILENAME = "hashes.json"
 
