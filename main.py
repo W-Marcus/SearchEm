@@ -1,0 +1,43 @@
+# Author: Marcus Wallin
+import logging
+
+from args import parse_args
+from embedder import Embedder
+from query import Searcher, run_repl
+from scanner import Scanner
+from setup import setup
+
+
+def main() -> None:
+    args = parse_args()
+    args, settings, logger = setup(args)
+
+    assert args.database is not None
+
+    if args.refresh or args.update:
+        scanner = Scanner(args.dir, args.database, settings.extensions)
+        result = scanner.scan(force_reprocess=args.update)
+
+        if result.to_process:
+            embedder = Embedder(args.model, args.dir, args.database)
+            embedder.embed_index(result.to_process)
+            embedder.commit()
+            result.commit(args.dir, args.database)
+        else:
+            logger.info("No new or changed files found.")
+    else:
+        logger.info("Skipping indexing. Use --refresh or --update to embed files.")
+
+    try:
+        searcher = Searcher(
+            database=args.database,
+            directory=args.dir,
+            model_id=args.model,
+        )
+        run_repl(searcher, k=args.top_k)
+    except FileNotFoundError as e:
+        logger.error("%s", e)
+
+
+if __name__ == "__main__":
+    main()
