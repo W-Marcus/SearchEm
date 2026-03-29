@@ -8,6 +8,7 @@ from models.common.scan import FileIndex, HashStore, ScanResult, hash_file
 
 logger = logging.getLogger("searchem.core.scanner")
 
+
 LOCK_FILENAME = "index.lock"
 LOCK_TIMEOUT = 0  # fail immediately. Needed to avoid both CLI and REST making change at the same time. Even with this, issues could arise if used on same directory. TODO
 
@@ -16,16 +17,22 @@ def _gather(directory: Path, extensions: list[str]) -> FileIndex:
     """
     Recursively gather all files under directory grouped by extension.
     Files with extensions not in the allowed set are excluded.
+    Hidden files and directories (starting with '.') are ignored.
     """
     allowed = {e.lower() for e in extensions}
     index: FileIndex = {}
 
     for file in directory.rglob("*"):
+        if any(part.startswith(".") for part in file.relative_to(directory).parts):
+            continue
+
         if not file.is_file():
             continue
+
         ext = file.suffix.lower()
         if ext not in allowed:
             continue
+
         relative = file.relative_to(directory)
         index.setdefault(ext, []).append(relative)
 

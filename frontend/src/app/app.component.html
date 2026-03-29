@@ -1,0 +1,12 @@
+<mat-toolbar color="primary">
+  <span>SearchEm</span>
+</mat-toolbar>
+
+<nav mat-tab-nav-bar [tabPanel]="tabPanel">
+  <a mat-tab-link routerLink="/search" routerLinkActive #s="routerLinkActive" [active]="s.isActive">Search</a>
+  <a mat-tab-link routerLink="/index"  routerLinkActive #i="routerLinkActive" [active]="i.isActive">Index</a>
+  <a mat-tab-link routerLink="/settings" routerLinkActive #st="routerLinkActive" [active]="st.isActive">Settings</a>
+</nav>
+<mat-tab-nav-panel #tabPanel>
+  <router-outlet />
+</mat-tab-nav-panel>

@@ -6,13 +6,12 @@ from pathlib import Path
 
 import faiss
 import numpy as np
-from PIL import Image
-from pydantic import BaseModel
-from transformers import AutoModel, AutoProcessor
-
 from core.chunker import chunk_file
 from models.common.chunks import Chunk
 from models.common.scan import ChunkMeta, FileIndex
+from PIL import Image
+from pydantic import BaseModel
+from transformers import AutoModel, AutoProcessor
 
 logger = logging.getLogger("searchem.core.embedder")
 
@@ -51,8 +50,8 @@ class Embedder:
         self.database = database
 
         logger.info("Loading model: %s", model_id)
-        self.processor = AutoProcessor.from_pretrained(model_id)
-        self.model = AutoModel.from_pretrained(model_id)
+        self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+        self.model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
         self.model.eval()
         logger.info("Model loaded.")
 

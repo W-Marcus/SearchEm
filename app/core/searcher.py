@@ -6,7 +6,6 @@ from pathlib import Path
 
 import faiss
 import numpy as np
-
 from core.chunker import chunk_file
 from core.embedder import FAISS_FILENAME, METADATA_FILENAME
 from models.common.scan import ChunkMeta
@@ -41,12 +40,14 @@ class Searcher:
         ]
         logger.info("Loaded %d metadata entries.", len(self._metadata))
 
-        # Must use the same model as was used for embedding
+        # Must use the same model as was used for embedding. This should ideally be factored out from searcher and embedder since it it common to both.
         from transformers import AutoModel, AutoProcessor
 
         logger.info("Loading model: %s", model_id)
-        self._processor = AutoProcessor.from_pretrained(model_id)
-        self._model = AutoModel.from_pretrained(model_id)
+        self._processor = AutoProcessor.from_pretrained(
+            model_id, trust_remote_code=True
+        )
+        self._model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
         self._model.eval()
         logger.info("Model ready.")
 

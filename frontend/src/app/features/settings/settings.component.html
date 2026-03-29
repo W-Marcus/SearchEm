@@ -1,0 +1,44 @@
+<div style="max-width:600px; margin:2rem auto; padding:0 1rem">
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Settings</mat-card-title>
+      <mat-card-subtitle>Stored locall. Passed to the API on next index run</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content style="margin-top:1rem; display:flex; flex-direction:column; gap:1rem">
+
+      <mat-form-field appearance="outline">
+        <mat-label>Model</mat-label>
+        <input matInput [ngModel]="model()" (ngModelChange)="model.set($event)" />
+        <mat-hint>HuggingFace model ID</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Extensions</mat-label>
+        <mat-chip-grid #chipGrid>
+          @for (ext of extensions(); track ext) {
+            <mat-chip-row (removed)="removeExtension(ext)">
+              {{ ext }}
+              <button matChipRemove><mat-icon>cancel</mat-icon></button>
+            </mat-chip-row>
+          }
+        </mat-chip-grid>
+        <input
+          placeholder="Add extension…"
+          [matChipInputFor]="chipGrid"
+          [matChipInputSeparatorKeyCodes]="separatorKeys"
+          (matChipInputTokenEnd)="addExtension($event)"
+        />
+        <mat-hint>Press Enter or comma to add. Leave empty to use server defaults.</mat-hint>
+      </mat-form-field>
+
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-raised-button color="primary" (click)="save()">
+        <mat-icon>save</mat-icon> {{ saved() ? 'Saved!' : 'Save' }}
+      </button>
+      <button mat-stroked-button color="accent" (click)="applyAndReindex()">
+        <mat-icon>autorenew</mat-icon> Save &amp; full reindex
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div>

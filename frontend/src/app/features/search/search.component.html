@@ -1,0 +1,42 @@
+<div style="max-width:800px; margin:2rem auto; padding:0 1rem">
+  <mat-form-field appearance="outline" style="width:100%">
+    <mat-label>Search</mat-label>
+    <input matInput [(ngModel)]="query" (keyup.enter)="search()" placeholder="Type a query…" />
+    <button mat-icon-button matSuffix (click)="search()">
+      <mat-icon>search</mat-icon>
+    </button>
+  </mat-form-field>
+
+  @if (loading()) {
+    <div style="text-align:center; margin:2rem">
+      <mat-spinner diameter="40" />
+    </div>
+  }
+
+  @if (error()) {
+    <p style="color:red">{{ error() }}</p>
+  }
+
+  @if (searched() && !loading() && results().length === 0) {
+    <p>No results found.</p>
+  }
+
+  @for (result of results(); track result.rank) {
+    <mat-card style="margin-bottom:1rem">
+      <mat-card-header>
+        <mat-card-title>{{ result.relative_path }}</mat-card-title>
+        <mat-card-subtitle>
+          <mat-chip-set>
+            <mat-chip>{{ result.extension }}</mat-chip>
+            <mat-chip>score: {{ result.score | number:'1.4-4' }}</mat-chip>
+            <mat-chip>{{ result.file_size / 1024 | number:'1.1-1' }} KB</mat-chip>
+            <mat-chip>{{ result.timestamp * 1000 | date:'yyyy-MM-dd HH:mm' }}</mat-chip>
+          </mat-chip-set>
+        </mat-card-subtitle>
+      </mat-card-header>
+      <mat-card-content>
+        <p style="white-space:pre-wrap; font-size:0.875rem">{{ result.content | slice:0:400 }}{{ result.content.length > 400 ? '…' : '' }}</p>
+      </mat-card-content>
+    </mat-card>
+  }
+</div>

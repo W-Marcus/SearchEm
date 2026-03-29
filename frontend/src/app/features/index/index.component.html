@@ -1,0 +1,30 @@
+<div style="max-width:600px; margin:2rem auto; padding:0 1rem">
+  <mat-card>
+    <mat-card-header>
+      <mat-card-title>Index management</mat-card-title>
+      <mat-card-subtitle>Scan and embed new or changed files</mat-card-subtitle>
+    </mat-card-header>
+    <mat-card-content style="margin-top:1rem">
+      @if (loading()) {
+        <mat-progress-bar mode="indeterminate" style="margin-bottom:1rem" />
+      }
+      @if (result(); as r) {
+        <p><mat-icon style="vertical-align:middle">check_circle</mat-icon> {{ r.message }}</p>
+        <p style="font-size:0.875rem; color:gray">
+          Processed: {{ r.files_processed }} &nbsp;|&nbsp; Unchanged: {{ r.files_unchanged }}
+        </p>
+      }
+      @if (error(); as e) {
+        <p style="color:red"><mat-icon style="vertical-align:middle">error</mat-icon> {{ e }}</p>
+      }
+    </mat-card-content>
+    <mat-card-actions>
+      <button mat-raised-button color="primary" (click)="index()" [disabled]="loading()">
+        <mat-icon>refresh</mat-icon> Index new &amp; changed
+      </button>
+      <button mat-stroked-button color="warn" (click)="reindexFull()" [disabled]="loading()">
+        <mat-icon>autorenew</mat-icon> Full reindex
+      </button>
+    </mat-card-actions>
+  </mat-card>
+</div>
