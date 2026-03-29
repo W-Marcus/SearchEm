@@ -1,8 +1,26 @@
+# docker-compose.yaml
 services:
-  searchem:
-    build: .
+  searchem-cli:
+    build:
+      context: .
+      args:
+        SURFACE: cli
     stdin_open: true
     tty: true
+    volumes:
+      - ./data:/data
+      - ${HF_CACHE_DIR:-~/.cache/huggingface}:/home/appuser/.cache/huggingface
+      - ./searchem_db:/db
+    environment:
+      - HF_HOME=/home/appuser/.cache/huggingface
+
+  searchem-rest:
+    build:
+      context: .
+      args:
+        SURFACE: rest
+    ports:
+      - "${REST_PORT:-8000}:8000"
     volumes:
       - ./data:/data
       - ${HF_CACHE_DIR:-~/.cache/huggingface}:/home/appuser/.cache/huggingface

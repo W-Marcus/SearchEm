@@ -10,22 +10,14 @@ from PIL import Image
 from pydantic import BaseModel
 from transformers import AutoModel, AutoProcessor
 
-from chunker import chunk_file
-from chunks import Chunk
-from scanner import FileIndex
+from core.chunker import chunk_file
+from models.common.chunks import Chunk
+from models.common.scan import ChunkMeta, FileIndex
 
-logger = logging.getLogger("searchem.embedder")
+logger = logging.getLogger("searchem.core.embedder")
 
 FAISS_FILENAME = "index.faiss"
 METADATA_FILENAME = "metadata.json"
-
-
-class ChunkMeta(BaseModel):
-    relative_path: str
-    extension: str
-    chunk_id: str
-    file_size: int  # in bytes
-    timestamp: float
 
 
 class MetadataStore(BaseModel):
@@ -48,7 +40,6 @@ class MetadataStore(BaseModel):
 
     def remove_file(self, relative_path: Path) -> None:
         """Remove all entries for a given file (used before re-embedding)."""
-
         self.entries = [
             e for e in self.entries if e.relative_path != str(relative_path)
         ]
@@ -74,8 +65,7 @@ class Embedder:
             logger.info("Loading existing FAISS index.")
             return faiss.read_index(str(path))
         logger.info("Creating new FAISS index.")
-        # Dimension will be set on first embed
-        return None  # type: ignore
+        return None  # type: ignore[return-value]  # initialised on first embed
 
     def _embed(self, chunk: Chunk) -> np.ndarray:
         """Embed a single chunk, returning a 1D float32 numpy array."""
@@ -95,26 +85,23 @@ class Embedder:
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        embedding = outputs.last_hidden_state.mean(dim=1).squeeze().float().numpy()
-        return embedding
+        return outputs.last_hidden_state.mean(dim=1).squeeze().float().numpy()
 
     def _ensure_index(self, dim: int) -> None:
         """Initialise FAISS index once we know the embedding dimension."""
-
         if self._index is None:
             self._index = faiss.IndexFlatIP(dim)
             logger.info("Initialised FAISS index with dim=%d", dim)
 
     def _embed_and_add(self, chunk: Chunk, meta: ChunkMeta) -> None:
         """Embed a chunk and add it to the FAISS index and metadata store."""
-
         embedding = self._embed(chunk)
         norm = float(np.linalg.norm(embedding))
         if norm > 0:
             embedding = embedding / norm
 
         self._ensure_index(embedding.shape[0])
-        self._index.add(embedding.reshape(1, -1))  # type: ignore
+        self._index.add(embedding.reshape(1, -1))  # type: ignore[union-attr]
         self._meta.entries.append(meta)
 
     def _make_meta(self, chunk: Chunk) -> ChunkMeta:
@@ -134,7 +121,6 @@ class Embedder:
         Removes existing entries for each file before re-embedding,
         so this is safe to call for both new and changed files.
         """
-
         total_files = sum(len(v) for v in index.values())
         logger.info("Embedding %d file(s)...", total_files)
         processed = 0
@@ -148,7 +134,6 @@ class Embedder:
                 if not chunks:
                     continue
 
-                # Remove stale entries before re-adding
                 self._meta.remove_file(relative_path)
 
                 for chunk in chunks:
@@ -170,7 +155,6 @@ class Embedder:
 
     def commit(self) -> None:
         """Persist FAISS index and metadata to disk."""
-
         if self._index is None:
             logger.warning("No embeddings to commit.")
             return

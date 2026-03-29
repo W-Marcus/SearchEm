@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel
 
-from args import DEFAULT_MODEL, Args
+from config.args import CommonArgs, DEFAULT_MODEL
 
 SETTINGS_FILENAME = "settings.yaml"
 
@@ -33,7 +33,6 @@ class Settings(BaseModel):
     @classmethod
     def load(cls, database: Path) -> "Settings":
         """Load settings from database directory, returning defaults if not found."""
-
         path = database / SETTINGS_FILENAME
         if not path.exists():
             return cls()
@@ -45,20 +44,17 @@ class Settings(BaseModel):
 
     def save(self, database: Path) -> None:
         """Save settings to database directory."""
-
         with (database / SETTINGS_FILENAME).open("w") as f:
             yaml.dump(self.model_dump(), f, default_flow_style=False)
 
-    def resolve_model(self, args: Args) -> str:
+    def resolve_model(self, args: CommonArgs) -> str:
         """Use args model if explicitly provided, otherwise fall back to settings."""
-
         if args.model != DEFAULT_MODEL:
             return args.model
         return self.model
 
-    def resolve_extensions(self, args: Args) -> list[str]:
+    def resolve_extensions(self, args: CommonArgs) -> list[str]:
         """Use args extensions if explicitly provided, otherwise fall back to settings."""
-
         if args.extensions is not None:
             return args.extensions
         return self.extensions
@@ -66,7 +62,6 @@ class Settings(BaseModel):
 
 def _setup_logging(logging_path: Path, level: int = logging.INFO) -> logging.Logger:
     """Set up logging to both file and console."""
-
     logging_path.mkdir(parents=True, exist_ok=True)
     log_file = logging_path / "SearchEm.log"
 
@@ -92,9 +87,8 @@ def _setup_logging(logging_path: Path, level: int = logging.INFO) -> logging.Log
     return logger
 
 
-def setup(args: Args) -> tuple[Args, Settings, logging.Logger]:
+def setup(args: CommonArgs) -> tuple[CommonArgs, Settings, logging.Logger]:
     """Create directories, load settings, resolve model and extensions, save updated settings."""
-
     assert args.database is not None, "database path must be resolved before setup"
     assert args.logging_path is not None, "logging path must be resolved before setup"
 

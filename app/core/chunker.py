@@ -1,19 +1,19 @@
-# Author: Marcus Wallin (and Claude.ai)
+# Author: Marcus Wallin
 
-#  TODO
-# 1) Add more chunking strategies (function based e.g. for code, paragraphs for text, section/subsection for markdown etc. e.g.)
-# 2) Consider making chunking strategy configurable by the user in some manner.
+# TODO:
+# 1) Add more chunking strategies (function-based for code, sections for markdown, etc.)
+# 2) Consider making chunking strategy configurable.
+
 import logging
 from pathlib import Path
 
-from chunks import Chunk
+from models.common.chunks import Chunk
 
-logger = logging.getLogger("searchem.chunkers")
+logger = logging.getLogger("searchem.core.chunker")
 
 
 def chunk_text(relative_path: Path, absolute_path: Path) -> list[Chunk]:
     """Split .txt / .md by non-empty paragraphs (double newline)."""
-
     text = absolute_path.read_text(encoding="utf-8", errors="ignore")
     paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
     chunks = [
@@ -30,7 +30,6 @@ def chunk_text(relative_path: Path, absolute_path: Path) -> list[Chunk]:
 
 def chunk_pdf(relative_path: Path, absolute_path: Path) -> list[Chunk]:
     """Split PDF by page using pypdf."""
-
     import pypdf
 
     chunks: list[Chunk] = []
@@ -53,7 +52,6 @@ def chunk_pdf(relative_path: Path, absolute_path: Path) -> list[Chunk]:
 
 def chunk_docx(relative_path: Path, absolute_path: Path) -> list[Chunk]:
     """Split .docx by non-empty paragraphs using python-docx."""
-
     import docx
 
     doc = docx.Document(str(absolute_path))
@@ -75,7 +73,6 @@ def chunk_docx(relative_path: Path, absolute_path: Path) -> list[Chunk]:
 
 def chunk_image(relative_path: Path, absolute_path: Path) -> list[Chunk]:
     """Treat each image as a single chunk."""
-
     return [
         Chunk(
             file_path=relative_path,
@@ -86,7 +83,7 @@ def chunk_image(relative_path: Path, absolute_path: Path) -> list[Chunk]:
     ]
 
 
-CHUNKERS = {
+CHUNKERS: dict[str, object] = {
     ".txt": chunk_text,
     ".md": chunk_text,
     ".pdf": chunk_pdf,
@@ -99,15 +96,11 @@ CHUNKERS = {
 }
 
 
-def chunk_file(
-    relative_path: Path,
-    absolute_path: Path,
-) -> list[Chunk]:
+def chunk_file(relative_path: Path, absolute_path: Path) -> list[Chunk]:
     """Dispatch to the correct chunker based on file extension."""
-
     ext = relative_path.suffix.lower()
     chunker = CHUNKERS.get(ext)
     if chunker is None:
         logger.warning("No chunker for extension %s, skipping %s", ext, relative_path)
         return []
-    return chunker(relative_path, absolute_path)
+    return chunker(relative_path, absolute_path)  # type: ignore[operator]

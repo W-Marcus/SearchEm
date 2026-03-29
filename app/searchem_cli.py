@@ -1,10 +1,11 @@
 # Author: Marcus Wallin
 
-from args import parse_args
-from embedder import Embedder
-from query import Searcher, run_repl
-from scanner import Scanner
-from setup import setup
+from config.settings import setup
+from core.embedder import Embedder
+from core.scanner import Scanner
+from core.searcher import Searcher
+from models.cli.args import parse_args
+from services.cli.repl import run_repl
 
 
 def main() -> None:
@@ -34,7 +35,7 @@ def main() -> None:
             model_id=args.model,
         )
         run_repl(searcher, k=args.top_k)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, IndexError) as e:
         logger.error("%s", e)
 
 

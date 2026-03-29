@@ -10,8 +10,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY src/*.py ./
-
+COPY app/ .
 
 RUN useradd --create-home appuser \
     && chown -R appuser /app \
@@ -19,4 +18,7 @@ RUN useradd --create-home appuser \
     && chown -R appuser /data /db
 USER appuser
 
-ENTRYPOINT ["python", "searchem.py"]
+ARG SURFACE=cli
+ENV SURFACE=${SURFACE}
+
+ENTRYPOINT ["sh", "-c", "python searchem_${SURFACE}.py \"$@\"", "--"]

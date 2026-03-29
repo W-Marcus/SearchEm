@@ -1,45 +1,18 @@
 # Author: Marcus Wallin
+
 import json
 import logging
 from pathlib import Path
 
 import faiss
 import numpy as np
-from pydantic import BaseModel
 
-from chunker import chunk_file
-from embedder import FAISS_FILENAME, METADATA_FILENAME, ChunkMeta
+from core.chunker import chunk_file
+from core.embedder import FAISS_FILENAME, METADATA_FILENAME
+from models.common.scan import ChunkMeta
+from models.common.search import QueryResult
 
-logger = logging.getLogger("searchem.query")
-
-
-class QueryResult(BaseModel):
-    rank: int
-    score: float
-    relative_path: str
-    extension: str
-    chunk_id: str
-    file_size: int
-    timestamp: float
-    content: str
-
-    def display(self) -> str:
-        from datetime import datetime
-
-        ts = datetime.fromtimestamp(self.timestamp).strftime("%Y-%m-%d %H:%M")
-        size_kb = self.file_size / 1024
-        preview = self.content[:300].replace("\n", " ").strip()
-        if len(self.content) > 300:
-            preview += "..."
-
-        lines = [
-            f"  [{self.rank}] {self.relative_path} — {self.chunk_id}",
-            f"       score: {self.score:.4f} | {self.extension} | {size_kb:.1f} KB | {ts}",
-        ]
-        if preview:
-            lines.append(f"       {preview}")
-
-        return "\n".join(lines)
+logger = logging.getLogger("searchem.core.searcher")
 
 
 class Searcher:
@@ -68,7 +41,7 @@ class Searcher:
         ]
         logger.info("Loaded %d metadata entries.", len(self._metadata))
 
-        # Load model (must use same as used for creating embeddings)
+        # Must use the same model as was used for embedding
         from transformers import AutoModel, AutoProcessor
 
         logger.info("Loading model: %s", model_id)
@@ -96,7 +69,6 @@ class Searcher:
 
     def _fetch_content(self, meta: ChunkMeta) -> str:
         """Re-extract the chunk content from the original file at query time."""
-
         relative_path = Path(meta.relative_path)
         absolute = self.directory / relative_path
 
@@ -132,32 +104,3 @@ class Searcher:
                 )
             )
         return results
-
-
-def run_repl(searcher: Searcher, k: int = 5) -> None:
-    print("\nSearchEm — type a query to search, or 'exit' / Ctrl+C to quit.")
-    print(f"Returning top {k} results per query.\n")
-
-    while True:
-        try:
-            query = input("query> ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nExiting.")
-            break
-
-        if not query:
-            continue
-        if query.lower() in {"exit", "quit", "q"}:
-            print("Exiting.")
-            break
-
-        results = searcher.search(query, k=k)
-
-        if not results:
-            print("No results found.\n")
-            continue
-
-        print(f"\n{len(results)} result(s) for '{query}':")
-        for result in results:
-            print(result.display())
-        print()
