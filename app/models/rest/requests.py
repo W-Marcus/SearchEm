@@ -18,3 +18,8 @@ class IndexRequest(BaseModel):
         default=None,
         description="File extensions to index. Overrides stored settings when provided.",
     )
+
+
+class SettingsRequest(BaseModel):
+    model: str | None = Field(default=None)
+    extensions: list[str] | None = Field(default=None)

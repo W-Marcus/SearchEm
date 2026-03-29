@@ -5,9 +5,8 @@ import logging
 from pathlib import Path
 
 import faiss
-import numpy as np
 from core.chunker import chunk_file
-from core.embedder import FAISS_FILENAME, METADATA_FILENAME
+from core.embedder import FAISS_FILENAME, METADATA_FILENAME, ModelRegistry
 from models.common.scan import ChunkMeta
 from models.common.search import QueryResult
 
@@ -18,8 +17,8 @@ class Searcher:
     def __init__(self, database: Path, directory: Path, model_id: str) -> None:
         self.directory = directory
         self.database = database
+        self._model = ModelRegistry.get(model_id)
 
-        # Load FAISS index
         index_path = database / FAISS_FILENAME
         if not index_path.exists():
             raise FileNotFoundError(
@@ -29,7 +28,6 @@ class Searcher:
         logger.info("Loading FAISS index from %s", index_path)
         self.index = faiss.read_index(str(index_path))
 
-        # Load metadata
         meta_path = database / METADATA_FILENAME
         if not meta_path.exists():
             raise FileNotFoundError(f"No metadata found at {meta_path}.")
@@ -40,51 +38,19 @@ class Searcher:
         ]
         logger.info("Loaded %d metadata entries.", len(self._metadata))
 
-        # Must use the same model as was used for embedding. This should ideally be factored out from searcher and embedder since it it common to both.
-        from transformers import AutoModel, AutoProcessor
-
-        logger.info("Loading model: %s", model_id)
-        self._processor = AutoProcessor.from_pretrained(
-            model_id, trust_remote_code=True
-        )
-        self._model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
-        self._model.eval()
-        logger.info("Model ready.")
-
-    def _embed_query(self, query: str) -> np.ndarray:
-        import torch
-
-        inputs = self._processor(
-            text=query,
-            return_tensors="pt",
-            truncation=True,
-            padding=True,
-        )
-        with torch.no_grad():
-            outputs = self._model(**inputs)
-        embedding = outputs.last_hidden_state.mean(dim=1).squeeze().float().numpy()
-        norm = float(np.linalg.norm(embedding))
-        if norm > 0:
-            embedding = embedding / norm
-        return embedding
-
     def _fetch_content(self, meta: ChunkMeta) -> str:
-        """Re-extract the chunk content from the original file at query time."""
         relative_path = Path(meta.relative_path)
         absolute = self.directory / relative_path
-
         if not absolute.exists():
             return "(file no longer exists)"
-
         chunks = chunk_file(relative_path, absolute)
         for chunk in chunks:
             if chunk.chunk_id == meta.chunk_id:
                 return "" if chunk.is_image else str(chunk.content)
-
         return "(chunk no longer found)"
 
     def search(self, query: str, k: int = 5) -> list[QueryResult]:
-        embedding = self._embed_query(query)
+        embedding = self._model.embed_query(query)
         scores, indices = self.index.search(embedding.reshape(1, -1), k)
 
         results: list[QueryResult] = []

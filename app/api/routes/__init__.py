@@ -1,4 +1,5 @@
 from .index import router as index_router
 from .search import router as search_router
+from .settings import router as settings_router
 
-__all__ = ["index_router", "search_router"]
+__all__ = ["index_router", "search_router", "settings_router"]

@@ -30,7 +30,15 @@ export interface IndexRequest {
   force_reprocess?: boolean;
   extensions?: string[] | null;
 }
+export interface SettingsResponse {
+  model: string;
+  extensions: string[];
+}
 
+export interface SettingsRequest {
+  model?: string;
+  extensions?: string[];
+}
 const BASE = '/api';
 
 @Injectable({ providedIn: 'root' })
@@ -47,5 +55,12 @@ export class ApiService {
 
   reindexFull(): Observable<IndexResponse> {
     return this.http.post<IndexResponse>(`${BASE}/index/full`, {});
+  }
+  getSettings(): Observable<SettingsResponse> {
+    return this.http.get<SettingsResponse>(`${BASE}/settings`);
+  }
+
+  patchSettings(request: SettingsRequest): Observable<SettingsResponse> {
+    return this.http.patch<SettingsResponse>(`${BASE}/settings`, request);
   }
 }

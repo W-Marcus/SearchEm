@@ -28,12 +28,21 @@ export class SettingsComponent implements OnInit {
   readonly separatorKeys = [ENTER, COMMA];
 
   ngOnInit(): void {
-    const stored = localStorage.getItem('searchem-settings');
-    if (stored) {
-      const s = JSON.parse(stored);
-      this.model.set(s.model ?? this.model());
-      this.extensions.set(s.extensions ?? []);
-    }
+    this.api.getSettings().subscribe({
+      next: s => {
+        this.model.set(s.model);
+        this.extensions.set(s.extensions);
+      },
+      error: () => {
+        // fall back to localStorage if server unreachable
+        const stored = localStorage.getItem('searchem-settings');
+        if (stored) {
+          const s = JSON.parse(stored);
+          this.model.set(s.model ?? this.model());
+          this.extensions.set(s.extensions ?? []);
+        }
+      }
+    });
   }
 
   addExtension(event: MatChipInputEvent): void {
@@ -50,19 +59,26 @@ export class SettingsComponent implements OnInit {
   }
 
   save(): void {
-    localStorage.setItem('searchem-settings', JSON.stringify({
+    this.api.patchSettings({
       model: this.model(),
       extensions: this.extensions(),
-    }));
-    this.saved.set(true);
-    setTimeout(() => this.saved.set(false), 2000);
+    }).subscribe({
+      next: () => {
+        this.saved.set(true);
+        setTimeout(() => this.saved.set(false), 2000);
+      }
+    });
   }
 
   applyAndReindex(): void {
-    this.save();
-    this.api.index({
-      force_reprocess: true,
-      extensions: this.extensions().length ? this.extensions() : null,
-    }).subscribe();
+    this.api.patchSettings({
+      model: this.model(),
+      extensions: this.extensions(),
+    }).subscribe({
+      next: () => this.api.index({
+        force_reprocess: true,
+        extensions: this.extensions().length ? this.extensions() : null,
+      }).subscribe()
+    });
   }
 }

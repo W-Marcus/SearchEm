@@ -12,15 +12,14 @@ logger = logging.getLogger("searchem.services.rest")
 
 
 class SearchService:
-    """
-    Thin layer between REST route handlers and core logic.
-    Holds a single Searcher instance for the lifetime of the app.
-    """
-
-    def __init__(self, searcher: Searcher) -> None:
+    def __init__(self, searcher: Searcher | None) -> None:
         self._searcher = searcher
 
     def search(self, request: SearchRequest) -> SearchResponse:
+        if self._searcher is None:
+            raise HTTPException(
+                status_code=503, detail="Search index not ready. Run POST /index first."
+            )
         results = self._searcher.search(request.query, k=request.top_k)
         return SearchResponse(
             query=request.query,
@@ -30,22 +29,19 @@ class SearchService:
 
 
 class IndexService:
-    """
-    Orchestrates scanning and embedding on demand (e.g. via a REST trigger).
-    Stateless. Creates Embedder/Scanner per request so settings can vary.
-    """
-
     def __init__(
         self,
         directory: Path,
         database: Path,
         model_id: str,
         extensions: list[str],
+        search_service: SearchService,
     ) -> None:
         self._directory = directory
         self._database = database
         self._model_id = model_id
         self._extensions = extensions
+        self._search_service = search_service
 
     def run(self, request: IndexRequest) -> IndexResponse:
         extensions = request.extensions or self._extensions
@@ -72,6 +68,13 @@ class IndexService:
         embedder.embed_index(result.to_process)
         embedder.commit()
         result.commit(self._directory, self._database)
+
+        # Reinitialise searcher now that index exists
+        self._search_service._searcher = Searcher(
+            database=self._database,
+            directory=self._directory,
+            model_id=self._model_id,
+        )
 
         return IndexResponse(
             status="ok",

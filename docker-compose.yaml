@@ -36,4 +36,5 @@ services:
     ports:
       - "${FRONTEND_PORT:-4200}:80"
     depends_on:
-      - searchem-rest
+      searchem-rest:
+        condition: service_healthy

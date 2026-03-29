@@ -6,12 +6,13 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import uvicorn
-from api.routes import index_router, search_router
+from api.routes import index_router, search_router, settings_router
 from config.args import CommonArgs, add_common_args, resolve_common_paths
 from config.settings import Settings, _setup_logging
 from core.searcher import Searcher
 from fastapi import FastAPI
 from services.rest.search_service import IndexService, SearchService
+from services.rest.settings_service import SettingsService
 
 logger = logging.getLogger("searchem.rest")
 
@@ -40,23 +41,26 @@ def create_app(directory: Path, database: Path, model_id: str) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        search_service = SearchService(searcher=None)
+
         try:
             searcher = Searcher(
                 database=database, directory=directory, model_id=model_id
             )
-            app.state.search_service = SearchService(searcher)
+            search_service._searcher = searcher
         except FileNotFoundError as e:
             logger.warning(
-                "No index found. Search will be unavailable until indexing runs. (%s)",
-                e,
+                "No index found — search unavailable until indexing runs. (%s)", e
             )
-            app.state.search_service = None
 
+        app.state.search_service = search_service
+        app.state.settings_service = SettingsService(database=database)
         app.state.index_service = IndexService(
             directory=directory,
             database=database,
             model_id=model_id,
             extensions=settings.extensions,
+            search_service=search_service,
         )
 
         yield
@@ -70,6 +74,7 @@ def create_app(directory: Path, database: Path, model_id: str) -> FastAPI:
 
     app.include_router(search_router)
     app.include_router(index_router)
+    app.include_router(settings_router)
 
     return app
 

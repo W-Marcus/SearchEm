@@ -3,6 +3,14 @@ A semantic search engine for local use. Simply drop your documents or images in 
 
 ## Usage
 
+### In Brief
+```bash
+python app/searchem_rest.py --dir ./data --database ./data/searchem_db --model Qwen/Qwen3-VL-Embedding-2B --port 8000 --host 0.0.0.0
+cd frontend && ng serve --port 4200
+```
+
+You can now access SearchEm on localhost:4200.
+
 ### Common options
 
 | Flag | Short | Default | Description |
@@ -40,15 +48,15 @@ python searchem_rest.py [options]
 | `--reload` | `False` | Enable uvicorn auto-reload |
 
 ## Docker Commands Examples
-
-### Build
+Note that the initial build will likely be quite slow.
+### Build and Run
 ```bash
-docker compose build
+docker compose up --build
 ```
 
 ### CLI
 ```bash
-# Interactive session (index + search)
+# Interactive search (REPL)
 docker compose run --rm searchem-cli
 
 # With flags
@@ -59,38 +67,14 @@ docker compose run --rm searchem-cli --top-k 10
 
 ### REST API
 ```bash
-# Start in foreground
-docker compose up searchem-rest
-
-# Start in background
-docker compose up -d searchem-rest
-
-# Rebuild and restart after code changes
+# Rebuild and start
 docker compose up --build searchem-rest
 ```
 
-### Typical workflow
-```bash
-# 1. Build the index
-docker compose run --rm searchem-cli --refresh
-
-# 2. Serve queries
-docker compose up -d searchem-rest
-```
-
 ### Switching models
+Re-embed everything with a different model using `--update`.
 
-Re-embed everything with a different model using `--update` (required when changing models).
-
-> `nomic-ai/nomic-embed-text-v2-moe` requires `trust_remote_code=True`
-```bash
-# CLI
-docker compose run --rm searchem-cli --update --model nomic-ai/nomic-embed-text-v2-moe
-
-# REST (pass model at server start)
-docker compose up searchem-rest --model nomic-ai/nomic-embed-text-v2-moe
-```
-### Concurrent indexing
+## Concurrent indexing
 
 The index is protected by a file lock. Only one process may index at a time.
 Running CLI `--refresh` and `POST /index` simultaneously is safe, however the second will fail.

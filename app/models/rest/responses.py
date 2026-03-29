@@ -1,6 +1,5 @@
-from pydantic import BaseModel, Field
-
 from models.common.search import QueryResult
+from pydantic import BaseModel, Field
 
 
 class SearchResponse(BaseModel):
@@ -14,3 +13,8 @@ class IndexResponse(BaseModel):
     files_processed: int
     files_unchanged: int
     message: str
+
+
+class SettingsResponse(BaseModel):
+    model: str
+    extensions: list[str]
