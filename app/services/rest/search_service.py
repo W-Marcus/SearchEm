@@ -1,14 +1,22 @@
+import asyncio
+import json
 import logging
 from pathlib import Path
 
+from config.settings import Settings
 from core.embedder import Embedder
 from core.scanner import IndexLockError, Scanner
 from core.searcher import Searcher
 from fastapi import HTTPException
 from models.rest.requests import IndexRequest, SearchRequest
-from models.rest.responses import IndexResponse, SearchResponse
+from models.rest.responses import IndexProgressEvent, IndexResponse, SearchResponse
+from starlette.responses import StreamingResponse
 
 logger = logging.getLogger("searchem.services.rest")
+
+
+def _sse(event: IndexProgressEvent) -> str:
+    return f"data: {event.model_dump_json()}\n\n"
 
 
 class SearchService:
@@ -18,7 +26,8 @@ class SearchService:
     def search(self, request: SearchRequest) -> SearchResponse:
         if self._searcher is None:
             raise HTTPException(
-                status_code=503, detail="Search index not ready. Run POST /index first."
+                status_code=503,
+                detail="Search index not ready. Run POST /index first.",
             )
         results = self._searcher.search(request.query, k=request.top_k)
         return SearchResponse(
@@ -42,43 +51,171 @@ class IndexService:
         self._model_id = model_id
         self._extensions = extensions
         self._search_service = search_service
+        self._cancel_event: asyncio.Event | None = None
+        self._running = False
 
-    def run(self, request: IndexRequest) -> IndexResponse:
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    def cancel(self) -> bool:
+        """Request cancellation of the current run. Returns False if nothing is running."""
+        if self._cancel_event is None or not self._running:
+            return False
+        self._cancel_event.set()
+        return True
+
+    def stream(self, request: IndexRequest) -> StreamingResponse:
+        return StreamingResponse(
+            self._run_stream(request),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    async def _run_stream(self, request: IndexRequest):
+        if self._running:
+            yield _sse(
+                IndexProgressEvent(
+                    type="error",
+                    message="Another indexing operation is already running.",
+                )
+            )
+            return
+
+        self._running = True
+        self._cancel_event = asyncio.Event()
+
         extensions = request.extensions or self._extensions
-        scanner = Scanner(self._directory, self._database, extensions)
 
         try:
-            result = scanner.scan(force_reprocess=request.force_reprocess)
-        except IndexLockError as e:
-            raise HTTPException(status_code=409, detail=str(e))
+            scanner = Scanner(self._directory, self._database, extensions)
+            try:
+                result = scanner.scan(force_reprocess=request.force_reprocess)
+            except IndexLockError as e:
+                yield _sse(IndexProgressEvent(type="error", message=str(e)))
+                return
 
-        total_process = sum(len(v) for v in result.to_process.values())
-        total_unchanged = sum(len(v) for v in result.unchanged.values())
+            total_files = sum(len(v) for v in result.to_process.values())
 
-        if not result.to_process:
-            logger.info("No new or changed files found.")
-            return IndexResponse(
-                status="skipped",
-                files_processed=0,
-                files_unchanged=total_unchanged,
-                message="No new or changed files found.",
+            if not result.to_process:
+                yield _sse(
+                    IndexProgressEvent(
+                        type="done",
+                        message="No new or changed files found.",
+                    )
+                )
+                return
+
+            yield _sse(
+                IndexProgressEvent(
+                    type="start",
+                    message=f"Starting — {total_files} file(s) to embed.",
+                    file_total=total_files,
+                )
             )
 
-        embedder = Embedder(self._model_id, self._directory, self._database)
-        embedder.embed_index(result.to_process)
-        embedder.commit()
-        result.commit(self._directory, self._database)
+            embedder = Embedder(self._model_id, self._directory, self._database)
+            file_index = 0
 
-        # Reinitialise searcher now that index exists
-        self._search_service._searcher = Searcher(
-            database=self._database,
-            directory=self._directory,
-            model_id=self._model_id,
-        )
+            for ext, paths in result.to_process.items():
+                for relative_path in paths:
+                    if self._cancel_event.is_set():
+                        yield _sse(
+                            IndexProgressEvent(
+                                type="cancelled",
+                                message=f"Cancelled after {file_index} of {total_files} file(s).",
+                                file_index=file_index,
+                                file_total=total_files,
+                            )
+                        )
+                        return
 
-        return IndexResponse(
-            status="ok",
-            files_processed=total_process,
-            files_unchanged=total_unchanged,
-            message=f"Successfully embedded {total_process} file(s).",
-        )
+                    absolute = self._directory / relative_path
+                    from core.chunker import chunk_file
+
+                    chunks = chunk_file(relative_path, absolute)
+
+                    if not chunks:
+                        file_index += 1
+                        continue
+
+                    embedder._meta.remove_file(relative_path)
+                    chunk_total = len(chunks)
+
+                    for chunk_index, chunk in enumerate(chunks):
+                        if self._cancel_event.is_set():
+                            yield _sse(
+                                IndexProgressEvent(
+                                    type="cancelled",
+                                    message=f"Cancelled after {file_index} of {total_files} file(s).",
+                                    file_index=file_index,
+                                    file_total=total_files,
+                                )
+                            )
+                            return
+
+                        try:
+                            meta = embedder._make_meta(chunk)
+                            embedder._embed_and_add(chunk, meta)
+                        except Exception as e:
+                            logger.error(
+                                "Failed to embed %s [%s]: %s",
+                                relative_path,
+                                chunk.chunk_id,
+                                e,
+                            )
+
+                        yield _sse(
+                            IndexProgressEvent(
+                                type="chunk",
+                                message=f"{relative_path} — chunk {chunk_index + 1}/{chunk_total}",
+                                file=str(relative_path),
+                                file_index=file_index,
+                                file_total=total_files,
+                                chunk_index=chunk_index + 1,
+                                chunk_total=chunk_total,
+                            )
+                        )
+                        await asyncio.sleep(0)  # yield to event loop
+
+                    file_index += 1
+                    yield _sse(
+                        IndexProgressEvent(
+                            type="file",
+                            message=f"({file_index}/{total_files}) Embedded: {relative_path}",
+                            file=str(relative_path),
+                            file_index=file_index,
+                            file_total=total_files,
+                        )
+                    )
+
+            embedder.commit()
+            result.commit(self._directory, self._database)
+
+            if request.extensions:
+                settings = Settings.load(self._database)
+                settings.extensions = request.extensions
+                settings.save(self._database)
+                self._extensions = request.extensions
+
+            self._search_service._searcher = Searcher(
+                database=self._database,
+                directory=self._directory,
+                model_id=self._model_id,
+            )
+
+            yield _sse(
+                IndexProgressEvent(
+                    type="done",
+                    message=f"Done — {file_index} file(s) embedded.",
+                    file_index=file_index,
+                    file_total=total_files,
+                )
+            )
+
+        finally:
+            self._running = False
+            self._cancel_event = None

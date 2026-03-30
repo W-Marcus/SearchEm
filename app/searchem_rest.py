@@ -55,6 +55,7 @@ def create_app(directory: Path, database: Path, model_id: str) -> FastAPI:
 
         app.state.search_service = search_service
         app.state.settings_service = SettingsService(database=database)
+        app.include_router(settings_router)
         app.state.index_service = IndexService(
             directory=directory,
             database=database,

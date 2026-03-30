@@ -1,11 +1,35 @@
 # SearchEm
 A semantic search engine for local use. Simply drop your documents or images in a folder and let SearchEm figure out the rest.
 
+## Features
++ Command Line and Web User Interface.
++ Easily extensible through REST
++ Swap embedding model on the fly with Huggingface ID
++ Dockerized (optional)
++ Streaming embedding progress updates through the Web User Interface
+
+## Tech Stack
++ Python 
++ Torch
++ Angular
++ FAISS
+
+## Current Limitations (TODO)
++ Canceling indexing does not work
++ No support for GPU-acceleration
++ Un-optimized for speed and memory usage.
++ Sub-optimal chunking strategies and limited extension support. Attempting to add file-extensions not supported will silently fail
++ No automated testing
++ In some scenarios the settings page is out of sync with the actual settings.
+
+## Future Ideas
++ Integrated viewer (press search result -> instantly view relevant file)
+
 ## Usage
 
 ### In Brief
 ```bash
-python app/searchem_rest.py --dir ./data --database ./data/searchem_db --model Qwen/Qwen3-VL-Embedding-2B --port 8000 --host 0.0.0.0
+python app/searchem_rest.py --dir --model Qwen/Qwen3-VL-Embedding-2B --port 8000 --host 0.0.0.0
 cd frontend && ng serve --port 4200
 ```
 

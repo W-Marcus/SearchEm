@@ -1,6 +1,4 @@
-# Author: Marcus Wallin
-
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from models.rest.requests import SearchRequest
 from models.rest.responses import SearchResponse
 from services.rest.search_service import SearchService
@@ -17,5 +15,9 @@ def search(
     body: SearchRequest,
     service: SearchService = Depends(_get_search_service),
 ) -> SearchResponse:
-    """Perform a semantic search over the indexed files."""
+    if service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Search index not ready. Run POST /index first.",
+        )
     return service.search(body)

@@ -1,30 +1,85 @@
-<div style="max-width:600px; margin:2rem auto; padding:0 1rem">
+<div style="max-width:680px; margin:2rem auto; padding:0 1rem">
   <mat-card>
     <mat-card-header>
       <mat-card-title>Index management</mat-card-title>
       <mat-card-subtitle>Scan and embed new or changed files</mat-card-subtitle>
     </mat-card-header>
+
     <mat-card-content style="margin-top:1rem">
-      @if (loading()) {
-        <mat-progress-bar mode="indeterminate" style="margin-bottom:1rem" />
+
+      @if (state.running()) {
+      <mat-progress-bar mode="determinate"
+        [value]="state.fileTotal() > 0 ? (state.fileIndex() / state.fileTotal()) * 100 : 0" style="margin-bottom:8px" />
+      <p style="font-size:13px; color:gray; margin:0 0 4px">
+        File {{ state.fileIndex() }} / {{ state.fileTotal() }}
+        @if (state.chunkTotal() > 0) {
+        &nbsp;—&nbsp; chunk {{ state.chunkIndex() }} / {{ state.chunkTotal() }}
+        }
+      </p>
       }
-      @if (result(); as r) {
-        <p><mat-icon style="vertical-align:middle">check_circle</mat-icon> {{ r.message }}</p>
-        <p style="font-size:0.875rem; color:gray">
-          Processed: {{ r.files_processed }} &nbsp;|&nbsp; Unchanged: {{ r.files_unchanged }}
-        </p>
+
+      @if (state.lastStatus() === 'done') {
+      <p style="color:green; font-size:14px">
+        <mat-icon style="vertical-align:middle; font-size:16px">check_circle</mat-icon>
+        {{ state.progress()[state.progress().length - 1]?.message }}
+      </p>
       }
-      @if (error(); as e) {
-        <p style="color:red"><mat-icon style="vertical-align:middle">error</mat-icon> {{ e }}</p>
+      @if (state.lastStatus() === 'cancelled') {
+      <p style="color:orange; font-size:14px">
+        <mat-icon style="vertical-align:middle; font-size:16px">cancel</mat-icon>
+        {{ state.progress()[state.progress().length - 1]?.message }}
+      </p>
       }
+      @if (state.lastStatus() === 'error') {
+      <p style="color:red; font-size:14px">
+        <mat-icon style="vertical-align:middle; font-size:16px">error</mat-icon>
+        {{ state.progress()[state.progress().length - 1]?.message }}
+      </p>
+      }
+
+      @if (state.progress().length > 0) {
+      <div style="
+          max-height:280px;
+          overflow-y:auto;
+          font-size:12px;
+          font-family:monospace;
+          background:var(--color-background-secondary);
+          border-radius:var(--border-radius-md);
+          padding:10px 12px;
+          margin-top:12px;
+          line-height:1.8;
+        ">
+        @for (entry of state.progress(); track $index) {
+        <div [style.color]="
+              entry.type === 'error' ? 'red' :
+              entry.type === 'cancelled' ? 'orange' :
+              entry.type === 'done' ? 'green' :
+              entry.type === 'file' ? 'var(--color-text-primary)' :
+              'var(--color-text-secondary)'
+            ">{{ entry.message }}</div>
+        }
+      </div>
+      }
+
     </mat-card-content>
+
     <mat-card-actions>
-      <button mat-raised-button color="primary" (click)="index()" [disabled]="loading()">
+      <button mat-raised-button color="primary" (click)="index()" [disabled]="state.running()">
         <mat-icon>refresh</mat-icon> Index new &amp; changed
       </button>
-      <button mat-stroked-button color="warn" (click)="reindexFull()" [disabled]="loading()">
+      <button mat-stroked-button color="warn" (click)="reindexFull()" [disabled]="state.running()">
         <mat-icon>autorenew</mat-icon> Full reindex
       </button>
+      @if (state.running()) {
+      <button mat-stroked-button (click)="cancel()">
+        <mat-icon>stop</mat-icon> Cancel
+      </button>
+      }
+      @if (!state.running() && state.progress().length > 0) {
+      <button mat-button (click)="clear()">
+        <mat-icon>clear</mat-icon> Clear
+      </button>
+      }
     </mat-card-actions>
   </mat-card>
 </div>
