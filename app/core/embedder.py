@@ -17,12 +17,15 @@ logger = logging.getLogger("searchem.core.embedder")
 
 FAISS_FILENAME = "index.faiss"
 METADATA_FILENAME = "metadata.json"
+DEFAULT_BATCH_SIZE = 32
+COMMIT_EVERY_N_FILES = 10
 
 
 class _LoadedModel:
-    def __init__(self, model_id: str) -> None:
+    def __init__(self, model_id: str, batch_size: int = DEFAULT_BATCH_SIZE) -> None:
         import torch
 
+        self.batch_size = batch_size
         logger.info("Loading model: %s", model_id)
         self.processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
         self.model = AutoModel.from_pretrained(model_id, trust_remote_code=True)
@@ -30,39 +33,65 @@ class _LoadedModel:
         self._torch = torch
         logger.info("Model loaded: %s", model_id)
 
-    def embed(self, chunk: Chunk) -> np.ndarray:
-        if chunk.is_image:
-            image = Image.open(chunk.content).convert("RGB")
-            inputs = self.processor(images=image, return_tensors="pt")
-        else:
+    def _normalise(self, embeddings: np.ndarray) -> np.ndarray:
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        norms = np.where(norms == 0, 1, norms)
+        return (embeddings / norms).astype(np.float32)
+
+    def embed_texts(self, texts: list[str]) -> np.ndarray:
+        """Embed a batch of texts. Returns (N, dim) normalised float32 array."""
+        all_embeddings = []
+
+        for i in range(0, len(texts), self.batch_size):
+            batch = texts[i : i + self.batch_size]
             inputs = self.processor(
-                text=str(chunk.content),
+                text=batch,
                 return_tensors="pt",
                 truncation=True,
                 padding=True,
             )
-        with self._torch.no_grad():
+            with self._torch.inference_mode():
+                outputs = self.model(**inputs)
+
+            embeddings = outputs.last_hidden_state.mean(dim=1).float().detach().numpy()
+            all_embeddings.append(embeddings)
+
+        return self._normalise(np.vstack(all_embeddings))
+
+    def embed_image(self, path: Path) -> np.ndarray:
+        """Embed a single image. Returns (1, dim) normalised float32 array."""
+        image = Image.open(path).convert("RGB")
+        inputs = self.processor(images=image, return_tensors="pt")
+        with self._torch.inference_mode():
             outputs = self.model(**inputs)
-        embedding = outputs.last_hidden_state.mean(dim=1).squeeze().float().numpy()
-        norm = float(np.linalg.norm(embedding))
-        if norm > 0:
-            embedding = embedding / norm
-        return embedding
+        embedding = outputs.last_hidden_state.mean(dim=1).float().detach().numpy()
+        return self._normalise(embedding)
 
     def embed_query(self, query: str) -> np.ndarray:
-        inputs = self.processor(
-            text=query,
-            return_tensors="pt",
-            truncation=True,
-            padding=True,
-        )
-        with self._torch.no_grad():
-            outputs = self.model(**inputs)
-        embedding = outputs.last_hidden_state.mean(dim=1).squeeze().float().numpy()
-        norm = float(np.linalg.norm(embedding))
-        if norm > 0:
-            embedding = embedding / norm
-        return embedding
+        """Embed a single query string. Returns (dim,) float32 array."""
+        return self.embed_texts([query])[0]
+
+    def embed_chunks(self, chunks: list[Chunk]) -> np.ndarray:
+        """
+        Embed a list of chunks efficiently.
+        Text chunks are batched together; images are embedded individually.
+        Returns (N, dim) normalised float32 array in input order.
+        """
+        results: dict[int, np.ndarray] = {}
+
+        text_indices = [i for i, c in enumerate(chunks) if not c.is_image]
+        image_indices = [i for i, c in enumerate(chunks) if c.is_image]
+
+        if text_indices:
+            texts = [str(chunks[i].content) for i in text_indices]
+            text_embeddings = self.embed_texts(texts)
+            for idx, embedding in zip(text_indices, text_embeddings):
+                results[idx] = embedding
+
+        for i in image_indices:
+            results[i] = self.embed_image(chunks[i].content)[0]  # type: ignore[arg-type]
+
+        return np.stack([results[i] for i in range(len(chunks))])
 
 
 class ModelRegistry:
@@ -71,9 +100,9 @@ class ModelRegistry:
     _cache: dict[str, _LoadedModel] = {}
 
     @classmethod
-    def get(cls, model_id: str) -> _LoadedModel:
+    def get(cls, model_id: str, batch_size: int = DEFAULT_BATCH_SIZE) -> _LoadedModel:
         if model_id not in cls._cache:
-            cls._cache[model_id] = _LoadedModel(model_id)
+            cls._cache[model_id] = _LoadedModel(model_id, batch_size)
         return cls._cache[model_id]
 
     @classmethod
@@ -126,12 +155,6 @@ class Embedder:
             self._index = faiss.IndexFlatIP(dim)
             logger.info("Initialised FAISS index with dim=%d", dim)
 
-    def _embed_and_add(self, chunk: Chunk, meta: ChunkMeta) -> None:
-        embedding = self._model.embed(chunk)
-        self._ensure_index(embedding.shape[0])
-        self._index.add(embedding.reshape(1, -1))  # type: ignore[union-attr]
-        self._meta.entries.append(meta)
-
     def _make_meta(self, chunk: Chunk) -> ChunkMeta:
         absolute = self.directory / chunk.file_path
         stat = absolute.stat()
@@ -143,36 +166,75 @@ class Embedder:
             timestamp=stat.st_mtime,
         )
 
+    def embed_file(self, relative_path: Path) -> int:
+        """
+        Embed all chunks for a single file and add to index.
+        Returns number of chunks embedded.
+        """
+        absolute = self.directory / relative_path
+        chunks = chunk_file(relative_path, absolute)
+        if not chunks:
+            return 0
+
+        self._meta.remove_file(relative_path)
+
+        try:
+            embeddings = self._model.embed_chunks(chunks)
+        except Exception as e:
+            logger.error("Failed to embed %s: %s", relative_path, e)
+            return 0
+
+        metas = [self._make_meta(chunk) for chunk in chunks]
+        self._ensure_index(embeddings.shape[1])
+
+        for embedding, meta in zip(embeddings, metas):
+            self._index.add(embedding.reshape(1, -1))  # type: ignore[union-attr]
+            self._meta.entries.append(meta)
+
+        return len(chunks)
+
+    def incremental_commit(self) -> None:
+        """Persist index and metadata to disk without finalising the run."""
+        if self._index is None:
+            return
+        faiss.write_index(self._index, str(self.database / FAISS_FILENAME))
+        self._meta.save(self.database)
+        logger.debug("Incremental commit.")
+
     def embed_index(self, index: FileIndex) -> None:
+        """
+        Embed all files in a FileIndex with incremental commits every
+        COMMIT_EVERY_N_FILES files so a stopped run loses minimal work.
+        Note: hash store commits are handled by the caller via ScanResult.commit_file().
+        """
         total_files = sum(len(v) for v in index.values())
         logger.info("Embedding %d file(s)...", total_files)
         processed = 0
+        since_last_commit = 0
 
         for ext, paths in index.items():
             logger.info("Processing %d %s file(s)", len(paths), ext)
             for relative_path in paths:
-                absolute = self.directory / relative_path
-                chunks = chunk_file(relative_path, absolute)
-                if not chunks:
+                n_chunks = self.embed_file(relative_path)
+                if n_chunks == 0:
                     continue
-                self._meta.remove_file(relative_path)
-                for chunk in chunks:
-                    try:
-                        meta = self._make_meta(chunk)
-                        self._embed_and_add(chunk, meta)
-                    except Exception as e:
-                        logger.error(
-                            "Failed to embed %s [%s]: %s",
-                            relative_path,
-                            chunk.chunk_id,
-                            e,
-                        )
+
                 processed += 1
+                since_last_commit += 1
                 logger.info(
-                    "(%d/%d) Embedded: %s", processed, total_files, relative_path
+                    "(%d/%d) Embedded: %s (%d chunk(s))",
+                    processed,
+                    total_files,
+                    relative_path,
+                    n_chunks,
                 )
 
+                if since_last_commit >= COMMIT_EVERY_N_FILES:
+                    self.incremental_commit()
+                    since_last_commit = 0
+
     def commit(self) -> None:
+        """Persists index and metadata."""
         if self._index is None:
             logger.warning("No embeddings to commit.")
             return

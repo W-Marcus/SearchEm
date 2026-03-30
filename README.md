@@ -1,7 +1,9 @@
 # SearchEm
+
 A semantic search engine for local use. Simply drop your documents or images in a folder and let SearchEm figure out the rest.
 
 ## Features
+
 + Command Line and Web User Interface.
 + Easily extensible through REST
 + Swap embedding model on the fly with Huggingface ID
@@ -9,13 +11,15 @@ A semantic search engine for local use. Simply drop your documents or images in 
 + Streaming embedding progress updates through the Web User Interface
 
 ## Tech Stack
-+ Python 
+
++ Python
 + Torch
 + Angular
 + FAISS
 
 ## Current Limitations (TODO)
-+ Canceling indexing does not work
+
++ Canceling indexing does not work (properly). Blocking issues.
 + No support for GPU-acceleration
 + Un-optimized for speed and memory usage.
 + Sub-optimal chunking strategies and limited extension support. Attempting to add file-extensions not supported will silently fail
@@ -23,11 +27,13 @@ A semantic search engine for local use. Simply drop your documents or images in 
 + In some scenarios the settings page is out of sync with the actual settings.
 
 ## Future Ideas
+
 + Integrated viewer (press search result -> instantly view relevant file)
 
 ## Usage
 
 ### In Brief
+
 ```bash
 python app/searchem_rest.py --dir --model Qwen/Qwen3-VL-Embedding-2B --port 8000 --host 0.0.0.0
 cd frontend && ng serve --port 4200
@@ -48,6 +54,7 @@ You can now access SearchEm on localhost:4200.
 ---
 
 ### CLI (`searchem_cli.py`)
+
 ```bash
 python searchem_cli.py [options]
 ```
@@ -61,6 +68,7 @@ python searchem_cli.py [options]
 ---
 
 ### REST API (`searchem_rest.py`)
+
 ```bash
 python searchem_rest.py [options]
 ```
@@ -72,13 +80,19 @@ python searchem_rest.py [options]
 | `--reload` | `False` | Enable uvicorn auto-reload |
 
 ## Docker Commands Examples
+
 Note that the initial build will likely be quite slow.
+
 ### Build and Run
+
+Configuration is done through .env
+
 ```bash
 docker compose up --build
 ```
 
 ### CLI
+
 ```bash
 # Interactive search (REPL)
 docker compose run --rm searchem-cli
@@ -90,12 +104,14 @@ docker compose run --rm searchem-cli --top-k 10
 ```
 
 ### REST API
+
 ```bash
 # Rebuild and start
 docker compose up --build searchem-rest
 ```
 
 ### Switching models
+
 Re-embed everything with a different model using `--update`.
 
 ## Concurrent indexing

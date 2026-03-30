@@ -11,7 +11,6 @@ logger = logging.getLogger("searchem.models.scan")
 
 HASHES_FILENAME = "hashes.json"
 
-# extension -> list of relative paths
 FileIndex = dict[str, list[Path]]
 
 
@@ -24,7 +23,6 @@ class HashStore(BaseModel):
 
     @classmethod
     def load(cls, database: Path) -> "HashStore":
-        """Load hash store from database directory, returning empty store if not found."""
         path = database / HASHES_FILENAME
         if not path.exists():
             return cls()
@@ -36,7 +34,6 @@ class HashStore(BaseModel):
         return cls.model_validate(data)
 
     def save(self, database: Path) -> None:
-        """Persist hash store to database directory."""
         with (database / HASHES_FILENAME).open("w") as f:
             json.dump(self.model_dump(), f, indent=2)
 
@@ -52,7 +49,7 @@ class ChunkMeta(BaseModel):
     relative_path: str
     extension: str
     chunk_id: str
-    file_size: int  # in bytes
+    file_size: int
     timestamp: float
 
 
@@ -75,21 +72,24 @@ class ScanResult:
             total_unchanged,
         )
 
+    def commit_file(self, relative_path: Path, directory: Path, database: Path) -> None:
+        """Commit a single file's hash immediately after embedding."""
+        content_hash = _hash_file(directory / relative_path)
+        self._hash_store.update(relative_path, content_hash)
+        self._hash_store.save(database)
+        logger.debug("Hash committed: %s", relative_path)
+
     def commit(self, directory: Path, database: Path) -> None:
-        """
-        Update hashes for processed files and persist to disk.
-        Call this only after successful embedding.
-        """
+        """Commit all processed files at once. Use when not doing incremental commits."""
         for paths in self.to_process.values():
             for relative_path in paths:
-                content_hash = hash_file(directory / relative_path)
+                content_hash = _hash_file(directory / relative_path)
                 self._hash_store.update(relative_path, content_hash)
         self._hash_store.save(database)
         logger.info("Hash store committed.")
 
 
-def hash_file(path: Path) -> str:
-    """Compute SHA-256 hash of file contents."""
+def _hash_file(path: Path) -> str:
     sha256 = hashlib.sha256()
     with path.open("rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):

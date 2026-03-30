@@ -11,63 +11,82 @@ from models.common.chunks import Chunk
 
 logger = logging.getLogger("searchem.core.chunker")
 
+CHUNK_SIZE = 300
+CHUNK_OVERLAP = 50
 
-def chunk_text(relative_path: Path, absolute_path: Path) -> list[Chunk]:
-    """Split .txt / .md by non-empty paragraphs (double newline)."""
-    text = absolute_path.read_text(encoding="utf-8", errors="ignore")
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    chunks = [
+
+def _sliding_window(text: str) -> list[str]:
+    """
+    Split text into overlapping chunks of CHUNK_SIZE words
+    with CHUNK_OVERLAP words of overlap between consecutive chunks.
+    """
+    words = text.split()
+    if not words:
+        return []
+
+    chunks = []
+    start = 0
+    while start < len(words):
+        chunk = words[start : start + CHUNK_SIZE]
+        chunks.append(" ".join(chunk))
+        if start + CHUNK_SIZE >= len(words):
+            break
+        start += CHUNK_SIZE - CHUNK_OVERLAP
+
+    return chunks
+
+
+def _text_to_chunks(relative_path: Path, text: str, id_prefix: str) -> list[Chunk]:
+    """Convert raw text to sliding window chunks."""
+    windows = _sliding_window(text)
+    return [
         Chunk(
             file_path=relative_path,
-            chunk_id=f"paragraph_{i}",
-            content=paragraph,
+            chunk_id=f"{id_prefix}_{i}",
+            content=window,
         )
-        for i, paragraph in enumerate(paragraphs)
+        for i, window in enumerate(windows)
     ]
-    logger.debug("%s → %d paragraph chunk(s)", relative_path, len(chunks))
+
+
+def chunk_text(relative_path: Path, absolute_path: Path) -> list[Chunk]:
+    """Split .txt / .md into overlapping word-level chunks."""
+    text = absolute_path.read_text(encoding="utf-8", errors="ignore").strip()
+    chunks = _text_to_chunks(relative_path, text, "chunk")
+    logger.debug("%s → %d chunk(s)", relative_path, len(chunks))
     return chunks
 
 
 def chunk_pdf(relative_path: Path, absolute_path: Path) -> list[Chunk]:
-    """Split PDF by page using pypdf."""
+    """
+    Extract text per page, then apply sliding window across the
+    full document so chunks aren't artificially broken at page boundaries.
+    """
     import pypdf
 
-    chunks: list[Chunk] = []
     with absolute_path.open("rb") as f:
         reader = pypdf.PdfReader(f)
-        for i, page in enumerate(reader.pages):
-            text = page.extract_text() or ""
-            if not text.strip():
-                continue
-            chunks.append(
-                Chunk(
-                    file_path=relative_path,
-                    chunk_id=f"page_{i}",
-                    content=text.strip(),
-                )
-            )
-    logger.debug("%s → %d page chunk(s)", relative_path, len(chunks))
+        full_text = " ".join(page.extract_text() or "" for page in reader.pages).strip()
+
+    chunks = _text_to_chunks(relative_path, full_text, "chunk")
+    logger.debug("%s → %d chunk(s)", relative_path, len(chunks))
     return chunks
 
 
 def chunk_docx(relative_path: Path, absolute_path: Path) -> list[Chunk]:
-    """Split .docx by non-empty paragraphs using python-docx."""
+    """
+    Extract all paragraph text from .docx, then apply sliding window
+    across the full document.
+    """
     import docx
 
     doc = docx.Document(str(absolute_path))
-    chunks: list[Chunk] = []
-    for i, para in enumerate(doc.paragraphs):
-        text = para.text.strip()
-        if not text:
-            continue
-        chunks.append(
-            Chunk(
-                file_path=relative_path,
-                chunk_id=f"paragraph_{i}",
-                content=text,
-            )
-        )
-    logger.debug("%s → %d paragraph chunk(s)", relative_path, len(chunks))
+    full_text = " ".join(
+        para.text.strip() for para in doc.paragraphs if para.text.strip()
+    )
+
+    chunks = _text_to_chunks(relative_path, full_text, "chunk")
+    logger.debug("%s → %d chunk(s)", relative_path, len(chunks))
     return chunks
 
 

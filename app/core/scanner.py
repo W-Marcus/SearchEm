@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 from filelock import FileLock, Timeout
-from models.common.scan import FileIndex, HashStore, ScanResult, hash_file
+from models.common.scan import FileIndex, HashStore, ScanResult, _hash_file
 
 logger = logging.getLogger("searchem.core.scanner")
 
@@ -56,7 +56,7 @@ def _filter_unchanged(
     for ext, paths in index.items():
         for relative_path in paths:
             absolute = directory / relative_path
-            content_hash = hash_file(absolute)
+            content_hash = _hash_file(absolute)
 
             if hash_store.is_unchanged(relative_path, content_hash):
                 unchanged.setdefault(ext, []).append(relative_path)

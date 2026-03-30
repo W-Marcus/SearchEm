@@ -41,7 +41,12 @@ def create_app(directory: Path, database: Path, model_id: str) -> FastAPI:
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        search_service = SearchService(searcher=None)
+        search_service = SearchService(
+            searcher=None,
+            database=database,
+            directory=directory,
+            model_id=model_id,
+        )
 
         try:
             searcher = Searcher(
@@ -50,7 +55,8 @@ def create_app(directory: Path, database: Path, model_id: str) -> FastAPI:
             search_service._searcher = searcher
         except FileNotFoundError as e:
             logger.warning(
-                "No index found — search unavailable until indexing runs. (%s)", e
+                "No index found. Search will be unavailable until indexing runs. (%s)",
+                e,
             )
 
         app.state.search_service = search_service

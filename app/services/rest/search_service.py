@@ -1,10 +1,10 @@
 import asyncio
-import json
 import logging
 from pathlib import Path
 
 from config.settings import Settings
-from core.embedder import Embedder
+from core.chunker import chunk_file
+from core.embedder import COMMIT_EVERY_N_FILES, Embedder
 from core.scanner import IndexLockError, Scanner
 from core.searcher import Searcher
 from fastapi import HTTPException
@@ -20,15 +20,32 @@ def _sse(event: IndexProgressEvent) -> str:
 
 
 class SearchService:
-    def __init__(self, searcher: Searcher | None) -> None:
+    def __init__(
+        self,
+        searcher: Searcher | None,
+        database: Path,
+        directory: Path,
+        model_id: str,
+    ) -> None:
         self._searcher = searcher
+        self._database = database
+        self._directory = directory
+        self._model_id = model_id
 
     def search(self, request: SearchRequest) -> SearchResponse:
         if self._searcher is None:
-            raise HTTPException(
-                status_code=503,
-                detail="Search index not ready. Run POST /index first.",
-            )
+            # Try to load now in case index was built after startup
+            try:
+                self._searcher = Searcher(
+                    database=self._database,
+                    directory=self._directory,
+                    model_id=self._model_id,
+                )
+            except FileNotFoundError:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Search index not ready. Run /index first.",
+                )
         results = self._searcher.search(request.query, k=request.top_k)
         return SearchResponse(
             query=request.query,
@@ -59,7 +76,6 @@ class IndexService:
         return self._running
 
     def cancel(self) -> bool:
-        """Request cancellation of the current run. Returns False if nothing is running."""
         if self._cancel_event is None or not self._running:
             return False
         self._cancel_event.set()
@@ -87,7 +103,6 @@ class IndexService:
 
         self._running = True
         self._cancel_event = asyncio.Event()
-
         extensions = request.extensions or self._extensions
 
         try:
@@ -123,6 +138,7 @@ class IndexService:
             for ext, paths in result.to_process.items():
                 for relative_path in paths:
                     if self._cancel_event.is_set():
+                        embedder.incremental_commit()
                         yield _sse(
                             IndexProgressEvent(
                                 type="cancelled",
@@ -133,40 +149,31 @@ class IndexService:
                         )
                         return
 
-                    absolute = self._directory / relative_path
-                    from core.chunker import chunk_file
+                    # Get chunk count for progress reporting without embedding yet
+                    chunks = chunk_file(relative_path, self._directory / relative_path)
+                    chunk_total = len(chunks)
 
-                    chunks = chunk_file(relative_path, absolute)
-
-                    if not chunks:
+                    if chunk_total == 0:
                         file_index += 1
                         continue
 
+                    # Yield per-chunk progress during embedding
                     embedder._meta.remove_file(relative_path)
-                    chunk_total = len(chunks)
+                    try:
+                        embeddings = embedder._model.embed_chunks(chunks)
+                    except Exception as e:
+                        logger.error("Failed to embed %s: %s", relative_path, e)
+                        file_index += 1
+                        continue
 
-                    for chunk_index, chunk in enumerate(chunks):
-                        if self._cancel_event.is_set():
-                            yield _sse(
-                                IndexProgressEvent(
-                                    type="cancelled",
-                                    message=f"Cancelled after {file_index} of {total_files} file(s).",
-                                    file_index=file_index,
-                                    file_total=total_files,
-                                )
-                            )
-                            return
+                    metas = [embedder._make_meta(chunk) for chunk in chunks]
+                    embedder._ensure_index(embeddings.shape[1])
 
-                        try:
-                            meta = embedder._make_meta(chunk)
-                            embedder._embed_and_add(chunk, meta)
-                        except Exception as e:
-                            logger.error(
-                                "Failed to embed %s [%s]: %s",
-                                relative_path,
-                                chunk.chunk_id,
-                                e,
-                            )
+                    for chunk_index, (embedding, meta) in enumerate(
+                        zip(embeddings, metas)
+                    ):
+                        embedder._index.add(embedding.reshape(1, -1))  # type: ignore[union-attr]
+                        embedder._meta.entries.append(meta)
 
                         yield _sse(
                             IndexProgressEvent(
@@ -179,7 +186,10 @@ class IndexService:
                                 chunk_total=chunk_total,
                             )
                         )
-                        await asyncio.sleep(0)  # yield to event loop
+                        await asyncio.sleep(0)
+
+                    # Commit hash immediately so resume skips this file if cancelled
+                    result.commit_file(relative_path, self._directory, self._database)
 
                     file_index += 1
                     yield _sse(
@@ -192,8 +202,12 @@ class IndexService:
                         )
                     )
 
+                    # Incremental FAISS/metadata commit every N files
+                    if file_index % COMMIT_EVERY_N_FILES == 0:
+                        embedder.incremental_commit()
+                        await asyncio.sleep(0)
+
             embedder.commit()
-            result.commit(self._directory, self._database)
 
             if request.extensions:
                 settings = Settings.load(self._database)
