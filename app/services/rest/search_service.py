@@ -104,8 +104,6 @@ class IndexService:
         self._running = True
         self._cancel_event = asyncio.Event()
 
-        # Always read fresh settings from disk so changes made via PATCH /settings
-        # are picked up without requiring a server restart.
         current_settings = Settings.load(self._database)
         extensions = request.extensions or current_settings.extensions
         model_id = current_settings.model

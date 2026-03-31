@@ -68,6 +68,13 @@ class Searcher:
                     file_size=meta.file_size,
                     timestamp=meta.timestamp,
                     content=self._fetch_content(meta),
+                    line_start=meta.line_start,
+                    line_end=meta.line_end,
+                    page_start=meta.page_start,
+                    page_end=meta.page_end,
+                    paragraph_start=meta.paragraph_start,
+                    paragraph_end=meta.paragraph_end,
+                    chapter=meta.chapter,
                 )
             )
         return results

@@ -52,6 +52,17 @@ class ChunkMeta(BaseModel):
     file_size: int
     timestamp: float
 
+    line_start: int | None = None
+    line_end: int | None = None
+
+    page_start: int | None = None
+    page_end: int | None = None
+
+    paragraph_start: int | None = None
+    paragraph_end: int | None = None
+
+    chapter: str | None = None
+
 
 class ScanResult:
     def __init__(
@@ -80,7 +91,7 @@ class ScanResult:
         logger.debug("Hash committed: %s", relative_path)
 
     def commit(self, directory: Path, database: Path) -> None:
-        """Commit all processed files at once. Use when not doing incremental commits."""
+        """Commit all processed files at once."""
         for paths in self.to_process.values():
             for relative_path in paths:
                 content_hash = _hash_file(directory / relative_path)

@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import uvicorn
-from api.routes import index_router, search_router, settings_router
+from api.routes import file_router, index_router, search_router, settings_router
 from config.args import CommonArgs, add_common_args, resolve_common_paths
 from config.settings import Settings, _setup_logging
 from core.searcher import Searcher
@@ -81,6 +81,7 @@ def create_app(directory: Path, database: Path, model_id: str) -> FastAPI:
     app.include_router(search_router)
     app.include_router(index_router)
     app.include_router(settings_router)
+    app.include_router(file_router)
 
     return app
 

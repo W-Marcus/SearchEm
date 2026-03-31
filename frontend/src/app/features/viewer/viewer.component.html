@@ -1,0 +1,77 @@
+<div class="viewer-overlay" [class.visible]="visible">
+
+    <div class="viewer-header">
+        <div class="viewer-title" [title]="title">
+            <mat-icon class="title-icon">{{ modeIcon() }}</mat-icon>
+            <span>{{ title }}</span>
+        </div>
+        <div class="viewer-meta">
+            @if (locationLabel) {
+            <span class="location-badge">{{ locationLabel }}</span>
+            }
+        </div>
+        <button mat-icon-button (click)="close.emit()" matTooltip="Close viewer">
+            <mat-icon>close</mat-icon>
+        </button>
+    </div>
+
+    <div class="viewer-body">
+
+        @if (loading()) {
+        <div class="viewer-center">
+            <mat-spinner diameter="48" />
+        </div>
+        }
+
+        @if (error()) {
+        <div class="viewer-center error">
+            <mat-icon>error_outline</mat-icon>
+            <p>{{ error() }}</p>
+        </div>
+        }
+
+        @if (!loading() && !error() && mode() === 'text') {
+        <div class="code-scroller">
+            <table class="code-table" #codeBlock>
+                <tbody>
+                    @for (line of lines; track line.num) {
+                    <tr [class.hl]="line.highlighted" [attr.data-line]="line.num">
+                        <td class="line-num">{{ line.num }}</td>
+                        <td class="line-text"><span>{{ line.text }}</span></td>
+                    </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        }
+
+        @if (!loading() && !error() && mode() === 'pdf') {
+        <iframe class="viewer-iframe" [src]="pdfUrl()" allowfullscreen>
+        </iframe>
+        }
+
+        @if (!loading() && !error() && mode() === 'image') {
+        <div class="image-container">
+            <img [src]="imageUrl()" alt="Image preview" class="viewer-image" />
+        </div>
+        }
+
+        @if (!loading() && !error() && mode() === 'docx') {
+        <iframe class="viewer-iframe" #docxFrame [srcdoc]="frameHtml()" sandbox="allow-same-origin">
+        </iframe>
+        }
+
+        @if (!loading() && !error() && mode() === 'epub') {
+        <iframe class="viewer-iframe" #epubFrame [srcdoc]="frameHtml()" sandbox="allow-same-origin">
+        </iframe>
+        }
+
+        @if (!loading() && !error() && mode() === 'unsupported') {
+        <div class="viewer-center">
+            <mat-icon style="font-size:48px; width:48px; height:48px;">hide_source</mat-icon>
+            <p>No viewer available for <strong>{{ result?.extension }}</strong> files.</p>
+        </div>
+        }
+
+    </div>
+</div>

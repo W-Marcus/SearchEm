@@ -11,6 +11,14 @@ export interface QueryResult {
   file_size: number;
   timestamp: number;
   content: string;
+
+  line_start: number | null;
+  line_end: number | null;
+  page_start: number | null;
+  page_end: number | null;
+  paragraph_start: number | null;
+  paragraph_end: number | null;
+  chapter: string | null;
 }
 
 export interface SearchResponse {
@@ -30,6 +38,7 @@ export interface IndexRequest {
   force_reprocess?: boolean;
   extensions?: string[] | null;
 }
+
 export interface SettingsResponse {
   model: string;
   extensions: string[];
@@ -39,6 +48,7 @@ export interface SettingsRequest {
   model?: string;
   extensions?: string[];
 }
+
 const BASE = '/api';
 
 @Injectable({ providedIn: 'root' })
@@ -56,6 +66,7 @@ export class ApiService {
   reindexFull(): Observable<IndexResponse> {
     return this.http.post<IndexResponse>(`${BASE}/index/full`, {});
   }
+
   getSettings(): Observable<SettingsResponse> {
     return this.http.get<SettingsResponse>(`${BASE}/settings`);
   }

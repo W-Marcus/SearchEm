@@ -39,9 +39,7 @@ class _LoadedModel:
         return (embeddings / norms).astype(np.float32)
 
     def embed_texts(self, texts: list[str]) -> np.ndarray:
-        """Embed a batch of texts. Returns (N, dim) normalised float32 array."""
         all_embeddings = []
-
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i : i + self.batch_size]
             inputs = self.processor(
@@ -52,14 +50,11 @@ class _LoadedModel:
             )
             with self._torch.inference_mode():
                 outputs = self.model(**inputs)
-
             embeddings = outputs.last_hidden_state.mean(dim=1).float().detach().numpy()
             all_embeddings.append(embeddings)
-
         return self._normalise(np.vstack(all_embeddings))
 
     def embed_image(self, path: Path) -> np.ndarray:
-        """Embed a single image. Returns (1, dim) normalised float32 array."""
         image = Image.open(path).convert("RGB")
         inputs = self.processor(images=image, return_tensors="pt")
         with self._torch.inference_mode():
@@ -68,15 +63,9 @@ class _LoadedModel:
         return self._normalise(embedding)
 
     def embed_query(self, query: str) -> np.ndarray:
-        """Embed a single query string. Returns (dim,) float32 array."""
         return self.embed_texts([query])[0]
 
     def embed_chunks(self, chunks: list[Chunk]) -> np.ndarray:
-        """
-        Embed a list of chunks efficiently.
-        Text chunks are batched together; images are embedded individually.
-        Returns (N, dim) normalised float32 array in input order.
-        """
         results: dict[int, np.ndarray] = {}
 
         text_indices = [i for i, c in enumerate(chunks) if not c.is_image]
@@ -95,8 +84,6 @@ class _LoadedModel:
 
 
 class ModelRegistry:
-    """Process-wide cache of loaded models. Keyed by model ID."""
-
     _cache: dict[str, _LoadedModel] = {}
 
     @classmethod
@@ -156,6 +143,7 @@ class Embedder:
             logger.info("Initialised FAISS index with dim=%d", dim)
 
     def _make_meta(self, chunk: Chunk) -> ChunkMeta:
+        """Build a ChunkMeta from a Chunk, copying all location fields."""
         absolute = self.directory / chunk.file_path
         stat = absolute.stat()
         return ChunkMeta(
@@ -164,13 +152,17 @@ class Embedder:
             chunk_id=chunk.chunk_id,
             file_size=stat.st_size,
             timestamp=stat.st_mtime,
+            # location fields — None for types that don't populate them
+            line_start=chunk.line_start,
+            line_end=chunk.line_end,
+            page_start=chunk.page_start,
+            page_end=chunk.page_end,
+            paragraph_start=chunk.paragraph_start,
+            paragraph_end=chunk.paragraph_end,
+            chapter=chunk.chapter,
         )
 
     def embed_file(self, relative_path: Path) -> int:
-        """
-        Embed all chunks for a single file and add to index.
-        Returns number of chunks embedded.
-        """
         absolute = self.directory / relative_path
         chunks = chunk_file(relative_path, absolute)
         if not chunks:
@@ -194,7 +186,6 @@ class Embedder:
         return len(chunks)
 
     def incremental_commit(self) -> None:
-        """Persist index and metadata to disk without finalising the run."""
         if self._index is None:
             return
         faiss.write_index(self._index, str(self.database / FAISS_FILENAME))
@@ -202,11 +193,6 @@ class Embedder:
         logger.debug("Incremental commit.")
 
     def embed_index(self, index: FileIndex) -> None:
-        """
-        Embed all files in a FileIndex with incremental commits every
-        COMMIT_EVERY_N_FILES files so a stopped run loses minimal work.
-        Note: hash store commits are handled by the caller via ScanResult.commit_file().
-        """
         total_files = sum(len(v) for v in index.values())
         logger.info("Embedding %d file(s)...", total_files)
         processed = 0
@@ -234,7 +220,6 @@ class Embedder:
                     since_last_commit = 0
 
     def commit(self) -> None:
-        """Persists index and metadata."""
         if self._index is None:
             logger.warning("No embeddings to commit.")
             return

@@ -13,8 +13,9 @@ Settings page
 + Command Line and Web User Interface.
 + Easily extensible through REST
 + Swap embedding model on the fly with Huggingface ID
-+ Dockerized (optional)
++ Dockerized
 + Streaming embedding progress updates through the Web User Interface
++ Integrated viewer
 
 ## Tech Stack
 
@@ -32,13 +33,6 @@ Settings page
 + No automated testing
 + In some scenarios the settings page is out of sync with the actual settings.
 + Full reindex does not always work.
-+ Web UI allows multiples of same extension
-+ Save and full reindex broken
-
-
-## Future Ideas
-
-+ Integrated viewer (press search result -> instantly view relevant file)
 
 ## Usage
 
