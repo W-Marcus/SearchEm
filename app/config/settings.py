@@ -4,9 +4,8 @@ import logging
 from pathlib import Path
 
 import yaml
+from config.args import DEFAULT_MODEL, CommonArgs
 from pydantic import BaseModel
-
-from config.args import CommonArgs, DEFAULT_MODEL
 
 SETTINGS_FILENAME = "settings.yaml"
 
@@ -43,7 +42,8 @@ class Settings(BaseModel):
         return cls.model_validate(data)
 
     def save(self, database: Path) -> None:
-        """Save settings to database directory."""
+        """Save settings to database directory, creating it if necessary."""
+        database.mkdir(parents=True, exist_ok=True)
         with (database / SETTINGS_FILENAME).open("w") as f:
             yaml.dump(self.model_dump(), f, default_flow_style=False)
 

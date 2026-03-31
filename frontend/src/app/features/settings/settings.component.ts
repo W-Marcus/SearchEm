@@ -8,6 +8,7 @@ import { MatChipsModule, MatChipInputEvent } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { COMMA, ENTER } from '@angular/cdk/keycodes';
 import { ApiService } from '../../core/api.service';
+import { IndexStateService } from '../../core/index-state.service';
 
 @Component({
   selector: 'app-settings',
@@ -21,6 +22,7 @@ import { ApiService } from '../../core/api.service';
 })
 export class SettingsComponent implements OnInit {
   private api = inject(ApiService);
+  private indexState = inject(IndexStateService);
 
   model = signal('Qwen/Qwen3-VL-Embedding-2B');
   extensions = signal<string[]>([]);
@@ -49,7 +51,10 @@ export class SettingsComponent implements OnInit {
     const value = (event.value || '').trim();
     if (value) {
       const ext = value.startsWith('.') ? value : `.${value}`;
-      this.extensions.update(exts => [...exts, ext]);
+      // Deduplicate: only add if not already present
+      if (!this.extensions().includes(ext)) {
+        this.extensions.update(exts => [...exts, ext]);
+      }
     }
     event.chipInput.clear();
   }
@@ -63,7 +68,10 @@ export class SettingsComponent implements OnInit {
       model: this.model(),
       extensions: this.extensions(),
     }).subscribe({
-      next: () => {
+      next: s => {
+        // Update local state with what the server confirmed
+        this.model.set(s.model);
+        this.extensions.set(s.extensions);
         this.saved.set(true);
         setTimeout(() => this.saved.set(false), 2000);
       }
@@ -75,10 +83,13 @@ export class SettingsComponent implements OnInit {
       model: this.model(),
       extensions: this.extensions(),
     }).subscribe({
-      next: () => this.api.index({
-        force_reprocess: true,
-        extensions: this.extensions().length ? this.extensions() : null,
-      }).subscribe()
+      next: s => {
+        // Update local state with what the server confirmed
+        this.model.set(s.model);
+        this.extensions.set(s.extensions);
+        // Use the SSE-based IndexStateService for the full reindex (GET /api/index/full)
+        this.indexState.start('/api/index/full');
+      }
     });
   }
 }

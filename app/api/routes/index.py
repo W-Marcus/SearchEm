@@ -24,6 +24,21 @@ def trigger_full_reindex(
     return service.stream(IndexRequest(force_reprocess=True))
 
 
+@router.post("", response_class=StreamingResponse)
+def trigger_index_post(
+    body: IndexRequest,
+    service: IndexService = Depends(_get_index_service),
+) -> StreamingResponse:
+    return service.stream(body)
+
+
+@router.post("/full", response_class=StreamingResponse)
+def trigger_full_reindex_post(
+    service: IndexService = Depends(_get_index_service),
+) -> StreamingResponse:
+    return service.stream(IndexRequest(force_reprocess=True))
+
+
 @router.delete("", status_code=204)
 def cancel_index(
     service: IndexService = Depends(_get_index_service),

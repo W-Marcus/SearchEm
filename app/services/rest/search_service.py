@@ -103,7 +103,12 @@ class IndexService:
 
         self._running = True
         self._cancel_event = asyncio.Event()
-        extensions = request.extensions or self._extensions
+
+        # Always read fresh settings from disk so changes made via PATCH /settings
+        # are picked up without requiring a server restart.
+        current_settings = Settings.load(self._database)
+        extensions = request.extensions or current_settings.extensions
+        model_id = current_settings.model
 
         try:
             scanner = Scanner(self._directory, self._database, extensions)
@@ -132,7 +137,7 @@ class IndexService:
                 )
             )
 
-            embedder = Embedder(self._model_id, self._directory, self._database)
+            embedder = Embedder(model_id, self._directory, self._database)
             file_index = 0
 
             for ext, paths in result.to_process.items():
@@ -149,7 +154,6 @@ class IndexService:
                         )
                         return
 
-                    # Get chunk count for progress reporting without embedding yet
                     chunks = chunk_file(relative_path, self._directory / relative_path)
                     chunk_total = len(chunks)
 
@@ -157,7 +161,6 @@ class IndexService:
                         file_index += 1
                         continue
 
-                    # Yield per-chunk progress during embedding
                     embedder._meta.remove_file(relative_path)
                     try:
                         embeddings = embedder._model.embed_chunks(chunks)
@@ -188,7 +191,6 @@ class IndexService:
                         )
                         await asyncio.sleep(0)
 
-                    # Commit hash immediately so resume skips this file if cancelled
                     result.commit_file(relative_path, self._directory, self._database)
 
                     file_index += 1
@@ -202,7 +204,6 @@ class IndexService:
                         )
                     )
 
-                    # Incremental FAISS/metadata commit every N files
                     if file_index % COMMIT_EVERY_N_FILES == 0:
                         embedder.incremental_commit()
                         await asyncio.sleep(0)
@@ -210,15 +211,14 @@ class IndexService:
             embedder.commit()
 
             if request.extensions:
-                settings = Settings.load(self._database)
-                settings.extensions = request.extensions
-                settings.save(self._database)
-                self._extensions = request.extensions
+                current_settings.extensions = request.extensions
+                current_settings.save(self._database)
+            self._extensions = extensions
 
             self._search_service._searcher = Searcher(
                 database=self._database,
                 directory=self._directory,
-                model_id=self._model_id,
+                model_id=model_id,
             )
 
             yield _sse(
