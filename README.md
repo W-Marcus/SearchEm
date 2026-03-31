@@ -2,6 +2,10 @@
 
 A semantic search engine for local use. Simply drop your documents or images in a folder and let SearchEm figure out the rest.
 
+## Images
+<img width="2866" height="1646" alt="image" src="https://github.com/user-attachments/assets/e0f57970-ba97-408d-a910-637241e604a1" />
+
+
 ## Features
 
 + Command Line and Web User Interface.
