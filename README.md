@@ -3,6 +3,10 @@
 A semantic search engine for local use. Simply drop your documents or images in a folder and let SearchEm figure out the rest.
 
 ## Images
+Search page
+<img width="2856" height="1045" alt="image" src="https://github.com/user-attachments/assets/dd730664-6092-4fad-9c93-1f565662ef7f" />
+Integrated viewer
+<img width="2850" height="1020" alt="image" src="https://github.com/user-attachments/assets/35b27710-6f1c-4d99-bed6-5253d799d49d" />
 Index page
 <img width="2848" height="1071" alt="image" src="https://github.com/user-attachments/assets/5200abb6-187d-4e7b-b58d-f771918e5a7f" />
 Settings page
