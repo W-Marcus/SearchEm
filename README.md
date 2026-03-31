@@ -3,8 +3,10 @@
 A semantic search engine for local use. Simply drop your documents or images in a folder and let SearchEm figure out the rest.
 
 ## Images
-<img width="2866" height="1646" alt="image" src="https://github.com/user-attachments/assets/e0f57970-ba97-408d-a910-637241e604a1" />
-
+Index page
+<img width="2848" height="1071" alt="image" src="https://github.com/user-attachments/assets/5200abb6-187d-4e7b-b58d-f771918e5a7f" />
+Settings page
+<img width="2865" height="923" alt="image" src="https://github.com/user-attachments/assets/5a2e1d0f-9547-4082-abcb-4c1e6e0cf83f" />
 
 ## Features
 
@@ -29,6 +31,10 @@ A semantic search engine for local use. Simply drop your documents or images in 
 + Sub-optimal chunking strategies and limited extension support. Attempting to add file-extensions not supported will silently fail
 + No automated testing
 + In some scenarios the settings page is out of sync with the actual settings.
++ Full reindex does not always work.
++ Web UI allows multiples of same extension
++ Save and full reindex broken
+
 
 ## Future Ideas
 
